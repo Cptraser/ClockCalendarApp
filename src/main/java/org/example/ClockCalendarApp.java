@@ -17,16 +17,14 @@ public class ClockCalendarApp extends JFrame {
     private void initUI() {
         // Create and add each functional panel
         ClockPanel clockPanel = new ClockPanel();
-        HabitPanel habitPanel = new HabitPanel();
         TomatoPanel tomatoPanel = new TomatoPanel();
         CalendarPanel calendarPanel = new CalendarPanel();
-        TodoPanel todoPanel = new TodoPanel(calendarPanel);
+        TodoAndHabitPanel todoAndHabitPanel = new TodoAndHabitPanel(calendarPanel);
 
         // Add panels to the main frame
         add(clockPanel, BorderLayout.NORTH);
         add(calendarPanel, BorderLayout.WEST);
-        add(todoPanel, BorderLayout.CENTER);
-        add(habitPanel, BorderLayout.EAST);
+        add(todoAndHabitPanel, BorderLayout.CENTER);
         add(tomatoPanel, BorderLayout.SOUTH);
     }
 

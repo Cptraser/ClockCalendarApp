@@ -76,9 +76,19 @@ public class CalendarPanel extends JPanel {
 
         // Add day buttons for the current month
         int maxDay = tempCal.getActualMaximum(Calendar.DAY_OF_MONTH);
+        // 添加当前月份的天数按钮，并检查是否为周末或有待办事项
         for (int day = 1; day <= maxDay; day++) {
             JButton dayButton = new JButton(String.valueOf(day));
+            dayButton.setBackground(Color.WHITE);
             String dateKey = String.format("%1$tY-%1$tm-%1$td", tempCal);
+            // 检测是否为周末或节假日
+            if (isWeekendOrHoliday(tempCal)) {
+                applyHighlight(dayButton, "weekend");
+            }
+            // 检测是否有待办事项
+            if (!getTodoItems(dateKey).isEmpty()) {
+                applyHighlight(dayButton, "todo");
+            }
             dayButton.addActionListener(e -> showTodoDialog(dateKey));
             daysPanel.add(dayButton);
             tempCal.add(Calendar.DAY_OF_MONTH, 1);
@@ -118,5 +128,31 @@ public class CalendarPanel extends JPanel {
 
     public List<TodoItem> getTodoItems(String dateKey) {
         return todoMap.getOrDefault(dateKey, new ArrayList<>());
+    }
+
+    public void highlightDateButton(String dateKey) {
+        for (Component component : daysPanel.getComponents()) {
+            if (component instanceof JButton && ((JButton) component).getText().equals(dateKey.substring(8))) {
+                applyHighlight((JButton) component, "todo");
+                break; // 假设每个日期都是唯一的，找到后即可退出循环
+            }
+        }
+    }
+
+    private void applyHighlight(JButton dayButton, String type) {
+        Color backgroundColor = switch (type) {
+            case "weekend" -> Color.cyan; // 周末使用蓝色
+            case "todo" -> Color.YELLOW; // 待办使用淡黄色，RGB(255, 255, 102)
+            default -> Color.WHITE; // 默认背景色为白色
+        };
+        dayButton.setBackground(backgroundColor); // 设置背景色
+        dayButton.setOpaque(true); // 设置按钮有背景色
+    }
+
+    private boolean isWeekendOrHoliday(Calendar cal) {
+        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+        // 周末是星期六和星期日
+        return dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY;
+        // 如果需要检测法定节假日，可以在这里添加逻辑
     }
 }
