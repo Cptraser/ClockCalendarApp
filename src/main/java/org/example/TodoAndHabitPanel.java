@@ -1,5 +1,6 @@
 package org.example;
 
+import org.example.Item.HabitItem;
 import org.example.Item.TodoItem;
 
 import javax.swing.*;
@@ -25,10 +26,9 @@ public class TodoAndHabitPanel extends JPanel {
     private JButton addHabitButton;
     private JComboBox<String> habitFrequencyComboBox;
 
-    private CalendarPanel calendarPanel; // Reference to CalendarPanel for communication
+    private List<HabitItem> habitItemList = new ArrayList<>();
 
     public TodoAndHabitPanel(CalendarPanel calendarPanel) {
-        this.calendarPanel = calendarPanel;
 
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("待办事项与习惯打卡"));
@@ -127,20 +127,38 @@ public class TodoAndHabitPanel extends JPanel {
         habitInputPanel.add(addHabitButton);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
+        // 创建查看习惯按钮和习惯显示面板
+        JButton viewHabitButton = new JButton("查看习惯");
+        viewHabitButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // 创建一个面板来容纳习惯信息
+                JDialog habitsDialog = new JDialog((Frame) null, "习惯信息", true);
+                habitsDialog.setLayout(new BorderLayout());
+                habitsDialog.setSize(400, 700);
+                JPanel habitsPanel = new JPanel();
+                habitsPanel.setLayout(new BoxLayout(habitsPanel, BoxLayout.Y_AXIS));
+
+                // 加载所有习惯信息到 habitsPanel
+                loadHabitsToPanel(habitsPanel);
+
+                habitsDialog.add(new JScrollPane(habitsPanel));
+
+                // 显示窗口
+                habitsDialog.setLocationRelativeTo(TodoAndHabitPanel.this); // 相对于当前面板定位
+                habitsDialog.setVisible(true);
+            }
+        });
+
         // Add components to the main panel
         JPanel inputPanel = new JPanel();
         inputPanel.setLayout(new BoxLayout(inputPanel, BoxLayout.Y_AXIS));
         inputPanel.add(todoInputPanel);
         inputPanel.add(habitInputPanel);
-        inputPanel.setBorder(BorderFactory.createTitledBorder("输入"));
+        inputPanel.add(viewHabitButton);
 
-        JPanel listPanel = new JPanel();
-        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
-        listPanel.add(new JScrollPane(combinedList));
-        listPanel.setBorder(BorderFactory.createTitledBorder("日志"));
 
         add(inputPanel);
-        add(listPanel);
 
         // Add action listener to the addTodoButton
         addTodoButton.addActionListener(new ActionListener() {
@@ -193,12 +211,12 @@ public class TodoAndHabitPanel extends JPanel {
         Timer timer = new Timer();
         Calendar now = Calendar.getInstance(); // 当前时间
         Calendar nextTime = Calendar.getInstance(); // 下一次提醒的时间
-        Date next = (Date) timeSpinner.getValue();
+        Date timeSpinnerValue = (Date) timeSpinner.getValue();
 
         // 设置 nextTime 为当前时间加上用户设置的时间
-        nextTime.set(Calendar.HOUR_OF_DAY, next.getHours());
-        nextTime.set(Calendar.MINUTE, next.getMinutes());
-        nextTime.set(Calendar.SECOND, next.getSeconds());
+        nextTime.set(Calendar.HOUR_OF_DAY, timeSpinnerValue.getHours());
+        nextTime.set(Calendar.MINUTE, timeSpinnerValue.getMinutes());
+        nextTime.set(Calendar.SECOND, 0);
 
         // 根据频率设置下一次提醒的时间
         switch (frequency) {
@@ -219,6 +237,16 @@ public class TodoAndHabitPanel extends JPanel {
             default:
                 return; // 如果频率无效，直接返回
         }
+
+        int year = Calendar.getInstance().get(Calendar.YEAR); // 获取年
+        int month = Calendar.getInstance().get(Calendar.MONTH) + 1; // 获取月
+        int day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH) + 1; // 获取日
+        String startTime = String.format("%d-%02d-%02d", year, month, day);
+        int hour = timeSpinnerValue.getHours();
+        int minute = timeSpinnerValue.getMinutes();
+        String time = String.format("%02d:%02d", hour, minute);
+
+        habitItemList.add(new HabitItem(startTime, frequency, time, habitText, timer));
 
         // 计算 delay，即下一次提醒时间与当前时间的差值
         long delay = Math.max(nextTime.getTimeInMillis() - now.getTimeInMillis(), 0);
@@ -243,27 +271,49 @@ public class TodoAndHabitPanel extends JPanel {
         };
     }
 
+    private void loadHabitsToPanel(JPanel panel) {
+        List<HabitItem> habitItems = getHabitItems();
+        for (HabitItem habit : habitItems) {
+            JPanel habitInfoPanel = new JPanel();
+            habitInfoPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
 
-    private void showTodoDialog(String dateKey) {
-        List<TodoItem> todoItems = calendarPanel.getTodoItems(dateKey);
-        JDialog dialog = new JDialog((Frame) null, "待办事项 - " + dateKey, true);
-        dialog.setLayout(new BorderLayout());
-        dialog.setSize(300, 200);
+            // 创建开始时间标签
+            JLabel startTimeLabel = new JLabel(habit.getStartTime());
+            // 创建频率标签
+            JLabel frequencyLabel = new JLabel(habit.getFrequency());
+            // 创建时间标签
+            JLabel timeLabel = new JLabel(habit.getTime());
+            // 创建内容标签
+            JLabel contentLabel = new JLabel(habit.getContent());
 
-        JPanel todoPanel = new JPanel();
-        todoPanel.setLayout(new BoxLayout(todoPanel, BoxLayout.Y_AXIS));
-        for (TodoItem item : todoItems) {
-            JCheckBox checkBox = new JCheckBox(item.getText(), item.isCompleted());
-            checkBox.addActionListener(e -> item.setCompleted(checkBox.isSelected()));
-            todoPanel.add(checkBox);
+            // 创建删除按钮
+            JButton deleteButton = new JButton("删除");
+            deleteButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    habit.cancelTimer();
+                    // 从 habitItemList 中移除习惯项
+                    habitItemList.remove(habit);
+                    // 从面板中移除 habitInfoPanel
+                    panel.remove(habitInfoPanel);
+                    // 重新验证面板以更新UI
+                    panel.revalidate();
+                    panel.repaint();
+                    // 如果需要，可以在这里添加其他删除后的逻辑
+                }
+            });
+
+            habitInfoPanel.add(deleteButton); // 添加删除按钮到习惯信息面板
+            habitInfoPanel.add(startTimeLabel);
+            habitInfoPanel.add(frequencyLabel);
+            habitInfoPanel.add(timeLabel);
+            habitInfoPanel.add(contentLabel);
+
+            panel.add(habitInfoPanel); // 将习惯信息面板添加到习惯显示面板
         }
+    }
 
-        dialog.add(new JScrollPane(todoPanel), BorderLayout.CENTER);
-
-        // Set dialog location to the right side of the main frame
-        Point location = getLocationOnScreen();
-        dialog.setLocation(location.x + getWidth(), location.y);
-
-        dialog.setVisible(true);
+    private List<HabitItem> getHabitItems() {
+        return habitItemList;
     }
 }

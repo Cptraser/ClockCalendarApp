@@ -4,6 +4,8 @@ import org.example.Item.TodoItem;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.util.*;
 import java.util.List;
 
@@ -14,12 +16,18 @@ public class CalendarPanel extends JPanel {
     private Calendar calendar;
     private Map<String, List<TodoItem>> todoMap;
 
+    private boolean isWeekendHighlightVisible = true;
+
+    // 存储日期和对应的番茄数量
+    private Map<String, Integer> tomatoCountMap = new HashMap<>();
+
     public CalendarPanel() {
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("日历"));
 
         calendar = Calendar.getInstance();
         todoMap = new HashMap<>();
+
 
         // Initialize components
         monthYearLabel = new JLabel();
@@ -36,6 +44,13 @@ public class CalendarPanel extends JPanel {
         // Add components to the main panel
         add(headerPanel, BorderLayout.NORTH);
         add(daysPanel, BorderLayout.CENTER);
+        JButton toggleWeekendHighlightButton = new JButton("隐藏/显示周末高亮");
+        add(toggleWeekendHighlightButton, BorderLayout.SOUTH);
+        // 添加按钮的事件监听器
+        toggleWeekendHighlightButton.addActionListener(e -> {
+            isWeekendHighlightVisible = !isWeekendHighlightVisible; // 切换状态
+            toggleWeekendHighlight(isWeekendHighlightVisible); // 调用切换方法
+        });
 
         // Add action listeners
         prevButton.addActionListener(e -> {
@@ -50,6 +65,11 @@ public class CalendarPanel extends JPanel {
 
         // Initial calendar update
         updateCalendar();
+    }
+
+    private void toggleWeekendHighlight(boolean visible) {
+        isWeekendHighlightVisible = visible;
+        updateCalendar(); // 刷新日历以应用更改
     }
 
     private void updateCalendar() {
@@ -78,11 +98,19 @@ public class CalendarPanel extends JPanel {
         int maxDay = tempCal.getActualMaximum(Calendar.DAY_OF_MONTH);
         // 添加当前月份的天数按钮，并检查是否为周末或有待办事项
         for (int day = 1; day <= maxDay; day++) {
-            JButton dayButton = new JButton(String.valueOf(day));
-            dayButton.setBackground(Color.WHITE);
             String dateKey = String.format("%1$tY-%1$tm-%1$td", tempCal);
+
+            // 获取并显示该日期的番茄数量
+            int tomatoCount = tomatoCountMap.getOrDefault(dateKey, 0);
+            JButton dayButton = new JButton();
+            dayButton.setText("<html>" + day + "<br>tomato: " + tomatoCount + "<html>");
+            dayButton.setHorizontalTextPosition(SwingConstants.CENTER); // 设置文本水平居中
+            dayButton.setVerticalTextPosition(SwingConstants.CENTER); // 设置文本垂直居中
+
+            dayButton.setBackground(Color.WHITE);
+
             // 检测是否为周末或节假日
-            if (isWeekendOrHoliday(tempCal)) {
+            if (isWeekendOrHoliday(tempCal, isWeekendHighlightVisible)) {
                 applyHighlight(dayButton, "weekend");
             }
             // 检测是否有待办事项
@@ -103,23 +131,51 @@ public class CalendarPanel extends JPanel {
         List<TodoItem> todoItems = todoMap.getOrDefault(dateKey, new ArrayList<>());
         JDialog dialog = new JDialog((Frame) null, "待办事项 - " + dateKey, true);
         dialog.setLayout(new BorderLayout());
-        dialog.setSize(300, 200);
+        dialog.setSize(400, 700);
 
         JPanel todoPanel = new JPanel();
         todoPanel.setLayout(new BoxLayout(todoPanel, BoxLayout.Y_AXIS));
+
         for (TodoItem item : todoItems) {
+            JPanel itemPanel = new JPanel(); // 使用 BorderLayout 来放置待办事项和删除按钮
+            itemPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
+
+            // 添加删除按钮
+            JButton deleteButton = new JButton("删除");
+            deleteButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    // 从待办事项列表中移除当前项
+                    todoItems.remove(item);
+                    todoMap.put(dateKey, new ArrayList<>(todoItems)); // 更新 map 中的列表
+                    // 从界面上移除待办事项项
+                    todoPanel.remove(itemPanel);
+                    todoPanel.revalidate(); // 重新验证面板以更新UI
+                    todoPanel.repaint(); // 重绘面板
+                }
+            });
+            itemPanel.add(deleteButton); // 将删除按钮放置在左侧
+
             JCheckBox checkBox = new JCheckBox(item.getText(), item.isCompleted());
             checkBox.addActionListener(e -> item.setCompleted(checkBox.isSelected()));
-            todoPanel.add(checkBox);
+            itemPanel.add(checkBox); // 将复选框放置在右侧
+
+            todoPanel.add(itemPanel); // 将包含复选框和删除按钮的面板添加到待办事项面板
         }
 
-        dialog.add(new JScrollPane(todoPanel), BorderLayout.CENTER);
+        dialog.add(new JScrollPane(todoPanel));
 
         // Set dialog location to the right side of the main frame
         Point location = getLocationOnScreen();
         dialog.setLocation(location.x - getWidth(), location.y);
 
         dialog.setVisible(true);
+    }
+
+    public void addTomato(String dateKey) {
+        int currentCount = tomatoCountMap.getOrDefault(dateKey, 0);
+        tomatoCountMap.put(dateKey, currentCount + 1);
+        updateCalendar();
     }
 
     public void addTodoItem(String dateKey, TodoItem todoItem) {
@@ -131,10 +187,24 @@ public class CalendarPanel extends JPanel {
     }
 
     public void highlightDateButton(String dateKey) {
+        Calendar currentCalendar = Calendar.getInstance();
         for (Component component : daysPanel.getComponents()) {
-            if (component instanceof JButton && ((JButton) component).getText().equals(dateKey.substring(8))) {
-                applyHighlight((JButton) component, "todo");
-                break; // 假设每个日期都是唯一的，找到后即可退出循环
+            if (component instanceof JButton dayButton) {
+                int year = currentCalendar.get(Calendar.YEAR); // 获取年
+                int month = currentCalendar.get(Calendar.MONTH) + 1; // 获取月，Calendar.MONTH 从 0 开始
+                String day = dayButton.getText();
+
+                // 使用 String.format() 格式化日期
+                String buttonDateKey = String.format("%d-%02d-%02d", year, month, Integer.parseInt(day));
+
+                // 检查按钮上的日期是否与待办事项的日期、月份和年份匹配
+                if (dateKey.equals(buttonDateKey)) {
+                    // 检查是否有待办事项
+                    if (!getTodoItems(dateKey).isEmpty()) {
+                        applyHighlight(dayButton, "todo");
+                    }
+                    break; // 找到匹配的日期后退出循环
+                }
             }
         }
     }
@@ -149,10 +219,14 @@ public class CalendarPanel extends JPanel {
         dayButton.setOpaque(true); // 设置按钮有背景色
     }
 
-    private boolean isWeekendOrHoliday(Calendar cal) {
+    private boolean isWeekendOrHoliday(Calendar cal, boolean isWeekendHighlightVisible) {
         int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
         // 周末是星期六和星期日
-        return dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY;
-        // 如果需要检测法定节假日，可以在这里添加逻辑
+        if (isWeekendHighlightVisible && (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY)) {
+            return true;
+        }
+        // 节假日
+
+        return false;
     }
 }
